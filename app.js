@@ -112,6 +112,48 @@ function guncelle() {
         .join("")}
       </tbody></table>`
     }`;
+  document.getElementById("sonuc").insertAdjacentHTML("beforeend", takvimHtml(tum, maxD, maxR));
+}
+
+// 7 günlük uygun pencere takvimi: her gün 09:00-18:00 arası uygun saat sayısı
+function takvimHtml(tum, maxD, maxR) {
+  const ilk = tum.find((n) => n.saatlik && n.saatlik.zaman);
+  if (!ilk) return `<p role="status">Saatlik tahmin verisi yok; takvim gösterilemiyor.</p>`;
+  const tarihler = [...new Set(ilk.saatlik.zaman.map((t) => t.slice(0, 10)))].slice(0, 7);
+  let en = null;
+  const satirlar = tum.map((n) => {
+    const hucreler = tarihler.map((t) => {
+      let top = 0, ok = 0;
+      if (n.saatlik) {
+        n.saatlik.zaman.forEach((z, i) => {
+          if (z.slice(0, 10) !== t) return;
+          const s = parseInt(z.slice(11, 13), 10);
+          if (s < 9 || s > 17) return;
+          const d = n.saatlik.dalga[i], r = n.saatlik.ruzgar[i];
+          if (d == null || r == null) return;
+          top++;
+          if (d <= maxD && r <= maxR) ok++;
+        });
+      }
+      if (top === 0) return `<td>❔ Veri yok</td>`;
+      if (!en || ok > en.ok) en = { ok, top, ad: n.ad, gun: t };
+      const oran = ok / top;
+      const durum = oran >= 0.75 ? "✅ Uygun" : oran >= 0.4 ? "⚠️ Kısmen" : "⛔ Uygun değil";
+      return `<td class="durum">${durum}<br><small>${ok}/${top} saat</small></td>`;
+    });
+    return `<tr><th scope="row">${n.ad}</th>${hucreler.join("")}</tr>`;
+  });
+  const gunAd = (t) =>
+    new Date(t + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short", day: "numeric", month: "numeric" });
+  const ozet = en && en.ok > 0
+    ? `En uygun gün: ${gunAd(en.gun)}, ${en.ad} (09:00-18:00 arasında ${en.ok}/${en.top} saat güvenli aralıkta).`
+    : `Seçilen güvenli aralıkta önümüzdeki 7 günde uygun saat bulunamadı.`;
+  return `<h2>7 günlük uygun pencere takvimi</h2>
+    <p role="status">${ozet}</p>
+    <div style="overflow-x:auto"><table>
+      <caption>Ders saatlerinde (09:00-18:00) güvenli aralıkta kalan saat sayısı</caption>
+      <thead><tr><th scope="col">Nokta</th>${tarihler.map((t) => `<th scope="col">${gunAd(t)}</th>`).join("")}</tr></thead>
+      <tbody>${satirlar.join("")}</tbody></table></div>`;
 }
 
 function ciz(veri, eski) {
@@ -162,13 +204,13 @@ async function verileriCek() {
   const lon = NOKTALAR.map((n) => n.lon).join(",");
   const [marine, ruzgar] = await Promise.all([
     fetch(
-      `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,wave_direction,wave_period`
+      `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,wave_direction,wave_period&hourly=wave_height&forecast_days=7&timezone=Europe%2FIstanbul`
     ).then((r) => {
       if (!r.ok) throw new Error("Marine API " + r.status);
       return r.json();
     }),
     fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m&hourly=wind_speed_10m&forecast_days=7&timezone=Europe%2FIstanbul&wind_speed_unit=kn`
     ).then((r) => {
       if (!r.ok) throw new Error("Forecast API " + r.status);
       return r.json();
@@ -177,7 +219,7 @@ async function verileriCek() {
   const m = Array.isArray(marine) ? marine : [marine];
   const w = Array.isArray(ruzgar) ? ruzgar : [ruzgar];
   return {
-    veriZamani: new Date(m[0].current.time + "Z").toISOString(),
+    veriZamani: new Date(Date.parse(m[0].current.time + "Z") - (m[0].utc_offset_seconds || 0) * 1000).toISOString(),
     noktalar: NOKTALAR.map((n, i) => ({
       ad: n.ad,
       dalga: m[i].current.wave_height,
@@ -185,6 +227,11 @@ async function verileriCek() {
       periyot: m[i].current.wave_period,
       ruzgar: w[i].current.wind_speed_10m,
       ruzgarYon: w[i].current.wind_direction_10m,
+      saatlik: {
+        zaman: m[i].hourly.time,
+        dalga: m[i].hourly.wave_height,
+        ruzgar: w[i].hourly.wind_speed_10m,
+      },
     })),
   };
 }
