@@ -30,6 +30,13 @@ stil.textContent = `
   th button{background:none;border:0;font:inherit;font-weight:bold;cursor:pointer;padding:4px}
   :focus-visible{outline:3px solid #ff8c00;outline-offset:2px}
   .durum{font-weight:bold;white-space:nowrap}
+  .ana-grafik{position:relative;height:300px}
+  .mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+  .mini{position:relative;height:190px}
+  .gul{position:relative;height:320px;max-width:420px}
+  details{margin:8px 0 24px}
+  summary{cursor:pointer;font-weight:bold;color:#004080}
+  h2{color:#004080;margin-top:28px}
 `;
 document.head.appendChild(stil);
 
@@ -113,6 +120,8 @@ function guncelle() {
       </tbody></table>`
     }`;
   document.getElementById("sonuc").insertAdjacentHTML("beforeend", takvimHtml(tum, maxD, maxR));
+  document.getElementById("sonuc").insertAdjacentHTML("beforeend", grafikBolumu(tum));
+  grafikleriCiz(tum, maxD, maxR);
 }
 
 // 7 günlük uygun pencere takvimi: her gün 09:00-18:00 arası uygun saat sayısı
@@ -154,6 +163,220 @@ function takvimHtml(tum, maxD, maxR) {
       <caption>Ders saatlerinde (09:00-18:00) güvenli aralıkta kalan saat sayısı</caption>
       <thead><tr><th scope="col">Nokta</th>${tarihler.map((t) => `<th scope="col">${gunAd(t)}</th>`).join("")}</tr></thead>
       <tbody>${satirlar.join("")}</tbody></table></div>`;
+}
+
+// ---------- Grafikler (Chart.js) ----------
+let secilenNokta = 0;
+let grafikler = [];
+const KISA_YON = ["K", "KD", "D", "GD", "G", "GB", "B", "KB"];
+const UZUN_YON = ["Kuzey", "Kuzeydoğu", "Doğu", "Güneydoğu", "Güney", "Güneybatı", "Batı", "Kuzeybatı"];
+const RENKLER = ["#004080", "#c2410c", "#15803d", "#7c3aed"];
+const CIZGILER = [[], [6, 3], [2, 2], [10, 3, 2, 3]];
+
+function gunKisa(t) {
+  return new Date(t + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short", day: "numeric", month: "numeric" });
+}
+function tarihListesi(n) {
+  return [...new Set(n.saatlik.zaman.map((t) => t.slice(0, 10)))].slice(0, 7);
+}
+function gunlukMaks(n, alan, tarihler) {
+  return tarihler.map((t) => {
+    let m = null;
+    n.saatlik.zaman.forEach((z, i) => {
+      if (z.slice(0, 10) !== t) return;
+      const v = (n.saatlik[alan] || [])[i];
+      if (v != null && (m === null || v > m)) m = v;
+    });
+    return m;
+  });
+}
+function fmt(v, b = 1) {
+  return v == null ? "veri yok" : Number(v).toFixed(b);
+}
+function tabloHtml(baslik, kolonlar, satirlar) {
+  return `<details><summary>Veriyi tablo olarak gör</summary><div style="overflow-x:auto"><table>
+    <caption>${baslik}</caption>
+    <thead><tr>${kolonlar.map((k) => `<th scope="col">${k}</th>`).join("")}</tr></thead>
+    <tbody>${satirlar
+      .map((s) => `<tr><th scope="row">${s[0]}</th>${s.slice(1).map((x) => `<td>${x}</td>`).join("")}</tr>`)
+      .join("")}</tbody></table></div></details>`;
+}
+function enYuksek(tum, alan) {
+  let en = null;
+  tum.forEach((n) => {
+    if (!n.saatlik) return;
+    n.saatlik[alan].forEach((v, i) => {
+      if (v != null && (!en || v > en.v)) en = { v, ad: n.ad, z: n.saatlik.zaman[i] };
+    });
+  });
+  return en;
+}
+
+function grafikBolumu(tum) {
+  const ilk = tum.find((n) => n.saatlik && n.saatlik.zaman);
+  if (!ilk) return "";
+  const tarihler = tarihListesi(ilk);
+  const gunBasliklar = tarihler.map(gunKisa);
+
+  // Özetler (her grafik için tek cümle)
+  const eD = enYuksek(tum, "dalga");
+  const eR = enYuksek(tum, "ruzgar");
+  const ozet1 = eD
+    ? `Önümüzdeki 7 günün en yüksek dalgası ${eD.ad} noktasında, ${gunKisa(eD.z.slice(0, 10))} günü saat ${eD.z.slice(11, 16)} civarında ${eD.v.toFixed(2)} m olarak bekleniyor.`
+    : "Dalga tahmini alınamadı.";
+  const ozet2 = eR
+    ? `En güçlü rüzgâr ${eR.ad} noktasında, ${gunKisa(eR.z.slice(0, 10))} günü ${Math.round(eR.v)} knot olarak bekleniyor.`
+    : "Rüzgâr tahmini alınamadı.";
+
+  // Rüzgâr gülü: seçilen noktada yön sıklıkları
+  const sn = tum[secilenNokta] && tum[secilenNokta].saatlik ? tum[secilenNokta] : ilk;
+  const yonler = (sn.saatlik.ruzgarYon || []).filter((v) => v != null);
+  const sayac = new Array(8).fill(0);
+  yonler.forEach((d) => sayac[Math.round(d / 45) % 8]++);
+  const toplam = yonler.length;
+  let enI = 0;
+  sayac.forEach((c, i) => { if (c > sayac[enI]) enI = i; });
+  const ozet3 = toplam
+    ? `${sn.ad} noktasında önümüzdeki 7 gün rüzgâr en çok ${UZUN_YON[enI]} (${KISA_YON[enI]}) yönünden esecek (saatlerin %${Math.round((sayac[enI] / toplam) * 100)}'i).`
+    : "Rüzgâr yönü verisi yok.";
+
+  // Tablo alternatifleri
+  const maksD = tum.map((n) => (n.saatlik ? gunlukMaks(n, "dalga", tarihler) : tarihler.map(() => null)));
+  const maksR = tum.map((n) => (n.saatlik ? gunlukMaks(n, "ruzgar", tarihler) : tarihler.map(() => null)));
+  const tab1 = tabloHtml("Günlük en yüksek dalga (m)", ["Gün", ...tum.map((n) => n.ad)],
+    tarihler.map((t, j) => [gunBasliklar[j], ...tum.map((n, i) => fmt(maksD[i][j], 2))]));
+  const tab2 = tabloHtml("Günlük en yüksek rüzgâr (kn)", ["Gün", ...tum.map((n) => n.ad)],
+    tarihler.map((t, j) => [gunBasliklar[j], ...tum.map((n, i) => fmt(maksR[i][j], 0))]));
+  const tab3 = tabloHtml(`${sn.ad}: rüzgâr yönü sıklığı (saat)`, ["Yön", "Saat sayısı"],
+    KISA_YON.map((y, i) => [`${y} (${UZUN_YON[i]})`, sayac[i]]));
+
+  const secenekler = tum
+    .map((n, i) => `<option value="${i}" ${n === sn ? "selected" : ""}>${n.ad}</option>`)
+    .join("");
+
+  return `
+    <h2>Dalga yüksekliği: 4 nokta karşılaştırması (7 gün)</h2>
+    <p role="status">${ozet1}</p>
+    <div class="ana-grafik"><canvas id="ana-grafik" role="img" aria-label="${ozet1}"></canvas></div>
+    ${tab1}
+
+    <h2>Rüzgâr hızı: nokta nokta karşılaştırma</h2>
+    <p role="status">${ozet2}</p>
+    <div class="mini-grid">
+      ${tum.map((n, i) => `<div class="mini"><canvas id="mini-${i}" role="img" aria-label="${n.ad} rüzgâr hızı, 7 günlük tahmin"></canvas></div>`).join("")}
+    </div>
+    ${tab2}
+
+    <h2>Rüzgâr gülü</h2>
+    <label>Nokta seçin:
+      <select id="gul-nokta">${secenekler}</select></label>
+    <p role="status">${ozet3}</p>
+    <div class="gul"><canvas id="gul" role="img" aria-label="${ozet3}"></canvas></div>
+    <p><small>Yönler rüzgârın estiği yönü gösterir (ör. KD = kuzeydoğudan eser).</small></p>
+    ${tab3}
+    ${typeof Chart === "undefined" ? `<p role="alert">⚠ Grafik kütüphanesi yüklenemedi; verileri yukarıdaki tablolardan görebilirsiniz.</p>` : ""}`;
+}
+
+function grafikleriCiz(tum, maxD, maxR) {
+  grafikler.forEach((c) => c.destroy());
+  grafikler = [];
+  const sel = document.getElementById("gul-nokta");
+  if (sel) {
+    sel.addEventListener("change", () => {
+      secilenNokta = parseInt(sel.value, 10) || 0;
+      guncelle();
+      const yeni = document.getElementById("gul-nokta");
+      if (yeni) yeni.focus();
+    });
+  }
+  if (typeof Chart === "undefined") return;
+  const ilk = tum.find((n) => n.saatlik && n.saatlik.zaman);
+  if (!ilk) return;
+  const etiketler = ilk.saatlik.zaman;
+
+  const x = {
+    grid: { display: false },
+    ticks: {
+      autoSkip: false, maxRotation: 0, font: { size: 10 },
+      callback: function (v) {
+        const z = this.getLabelForValue(v);
+        return z.slice(11, 16) === "12:00" ? gunKisa(z.slice(0, 10)) : "";
+      },
+    },
+  };
+  const sinir = (deger) => ({
+    label: "Güvenli sınır", data: etiketler.map(() => deger),
+    borderColor: "#000", borderDash: [4, 4], borderWidth: 1.5, pointRadius: 0,
+  });
+  const temel = { responsive: true, maintainAspectRatio: false, animation: false };
+
+  // Ana grafik: dalga yüksekliği
+  const anaEl = document.getElementById("ana-grafik");
+  if (anaEl) {
+    grafikler.push(new Chart(anaEl, {
+      type: "line",
+      data: {
+        labels: etiketler,
+        datasets: tum
+          .map((n, i) => ({
+            label: n.ad, data: n.saatlik ? n.saatlik.dalga : [],
+            borderColor: RENKLER[i], borderDash: CIZGILER[i], borderWidth: 2, pointRadius: 0, tension: 0.3,
+          }))
+          .concat([sinir(maxD)]),
+      },
+      options: {
+        ...temel,
+        plugins: { legend: { position: "bottom" } },
+        scales: { x, y: { beginAtZero: true, title: { display: true, text: "Dalga yüksekliği (m)" } } },
+      },
+    }));
+  }
+
+  // Small multiples: her nokta için rüzgâr hızı, aynı ölçek
+  let tavan = maxR;
+  tum.forEach((n) => n.saatlik && n.saatlik.ruzgar.forEach((v) => { if (v != null && v > tavan) tavan = v; }));
+  tum.forEach((n, i) => {
+    const el = document.getElementById("mini-" + i);
+    if (!el || !n.saatlik) return;
+    grafikler.push(new Chart(el, {
+      type: "line",
+      data: {
+        labels: etiketler,
+        datasets: [
+          { label: n.ad + " rüzgâr (kn)", data: n.saatlik.ruzgar, borderColor: RENKLER[i], borderDash: CIZGILER[i], borderWidth: 2, pointRadius: 0, tension: 0.3 },
+          sinir(maxR),
+        ],
+      },
+      options: {
+        ...temel,
+        plugins: { legend: { display: false }, title: { display: true, text: n.ad } },
+        scales: { x, y: { beginAtZero: true, max: Math.ceil(tavan + 2), title: { display: true, text: "kn" } } },
+      },
+    }));
+  });
+
+  // Rüzgâr gülü (radar): yön sıklığı
+  const gulEl = document.getElementById("gul");
+  if (gulEl) {
+    const sn = tum[secilenNokta] && tum[secilenNokta].saatlik ? tum[secilenNokta] : ilk;
+    const sayac = new Array(8).fill(0);
+    (sn.saatlik.ruzgarYon || []).forEach((d) => { if (d != null) sayac[Math.round(d / 45) % 8]++; });
+    grafikler.push(new Chart(gulEl, {
+      type: "radar",
+      data: {
+        labels: KISA_YON,
+        datasets: [{
+          label: sn.ad + ": yön sıklığı (saat)", data: sayac,
+          borderColor: "#004080", backgroundColor: "rgba(0,64,128,0.25)", borderWidth: 2, pointRadius: 4,
+        }],
+      },
+      options: {
+        ...temel,
+        plugins: { legend: { position: "bottom" } },
+        scales: { r: { beginAtZero: true, pointLabels: { font: { size: 14, weight: "bold" } } } },
+      },
+    }));
+  }
 }
 
 function ciz(veri, eski) {
@@ -210,7 +433,7 @@ async function verileriCek() {
       return r.json();
     }),
     fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m&hourly=wind_speed_10m&forecast_days=7&timezone=Europe%2FIstanbul&wind_speed_unit=kn`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m&hourly=wind_speed_10m,wind_direction_10m&forecast_days=7&timezone=Europe%2FIstanbul&wind_speed_unit=kn`
     ).then((r) => {
       if (!r.ok) throw new Error("Forecast API " + r.status);
       return r.json();
@@ -231,6 +454,7 @@ async function verileriCek() {
         zaman: m[i].hourly.time,
         dalga: m[i].hourly.wave_height,
         ruzgar: w[i].hourly.wind_speed_10m,
+        ruzgarYon: w[i].hourly.wind_direction_10m,
       },
     })),
   };
