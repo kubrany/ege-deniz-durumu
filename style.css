@@ -15,3 +15,26 @@ h1 {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     margin-top: 20px;
 }
+
+/* --- Pano bileşenleri (eskiden app.js içindeydi) --- */
+.kpi-satir{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
+.kpi{border:2px solid #004080;border-radius:8px;padding:12px;background:#fff}
+.kpi small{display:block;color:#333}
+.kpi strong{font-size:1.4rem;color:#004080}
+.kontrol{display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin:12px 0;padding:12px;border:1px solid #999;border-radius:8px}
+.kontrol label{display:flex;flex-direction:column;font-weight:bold;gap:4px}
+.kontrol input,.kontrol select{padding:6px;font-size:1rem}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #999;padding:8px;text-align:left}
+th button{background:none;border:0;font:inherit;font-weight:bold;cursor:pointer;padding:4px}
+:focus-visible{outline:3px solid #ff8c00;outline-offset:2px}
+.durum{font-weight:bold;white-space:nowrap}
+.ana-grafik{position:relative;height:300px}
+.mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.mini{position:relative;height:190px}
+.gul{position:relative;height:320px;max-width:420px}
+details{margin:8px 0 24px}
+summary{cursor:pointer;font-weight:bold;color:#004080}
+h2{color:#004080;margin-top:28px}
+.kaydir{overflow-x:auto}
+.hata{color:#b00020}
