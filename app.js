@@ -15,30 +15,6 @@ const zaman = document.getElementById("son-guncelleme");
 let VERI = null;
 let siralama = { anahtar: "ad", yon: 1 };
 
-// Küçük stil eklemesi (style.css'e dokunmadan)
-const stil = document.createElement("style");
-stil.textContent = `
-  .kpi-satir{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
-  .kpi{border:2px solid #004080;border-radius:8px;padding:12px;background:#fff}
-  .kpi small{display:block;color:#333}
-  .kpi strong{font-size:1.4rem;color:#004080}
-  .kontrol{display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin:12px 0;padding:12px;border:1px solid #999;border-radius:8px}
-  .kontrol label{display:flex;flex-direction:column;font-weight:bold;gap:4px}
-  .kontrol input,.kontrol select{padding:6px;font-size:1rem}
-  table{border-collapse:collapse;width:100%}
-  th,td{border:1px solid #999;padding:8px;text-align:left}
-  th button{background:none;border:0;font:inherit;font-weight:bold;cursor:pointer;padding:4px}
-  :focus-visible{outline:3px solid #ff8c00;outline-offset:2px}
-  .durum{font-weight:bold;white-space:nowrap}
-  .ana-grafik{position:relative;height:300px}
-  .mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-  .mini{position:relative;height:190px}
-  .gul{position:relative;height:320px;max-width:420px}
-  details{margin:8px 0 24px}
-  summary{cursor:pointer;font-weight:bold;color:#004080}
-  h2{color:#004080;margin-top:28px}
-`;
-document.head.appendChild(stil);
 
 function yukleniyor() {
   alan.innerHTML = `<p role="status">⏳ Veriler yükleniyor…</p>`;
@@ -159,7 +135,7 @@ function takvimHtml(tum, maxD, maxR) {
     : `Seçilen güvenli aralıkta önümüzdeki 7 günde uygun saat bulunamadı.`;
   return `<h2>7 günlük uygun pencere takvimi</h2>
     <p role="status">${ozet}</p>
-    <div style="overflow-x:auto"><table>
+    <div class="kaydir"><table>
       <caption>Ders saatlerinde (09:00-18:00) güvenli aralıkta kalan saat sayısı</caption>
       <thead><tr><th scope="col">Nokta</th>${tarihler.map((t) => `<th scope="col">${gunAd(t)}</th>`).join("")}</tr></thead>
       <tbody>${satirlar.join("")}</tbody></table></div>`;
@@ -194,7 +170,7 @@ function fmt(v, b = 1) {
   return v == null ? "veri yok" : Number(v).toFixed(b);
 }
 function tabloHtml(baslik, kolonlar, satirlar) {
-  return `<details><summary>Veriyi tablo olarak gör</summary><div style="overflow-x:auto"><table>
+  return `<details><summary>Veriyi tablo olarak gör</summary><div class="kaydir"><table>
     <caption>${baslik}</caption>
     <thead><tr>${kolonlar.map((k) => `<th scope="col">${k}</th>`).join("")}</tr></thead>
     <tbody>${satirlar
@@ -382,11 +358,11 @@ function grafikleriCiz(tum, maxD, maxR) {
 function ciz(veri, eski) {
   VERI = veri;
   const uyari = eski
-    ? `<p role="alert" style="color:#b00020"><strong>⚠ Canlı veriye ulaşılamadı.</strong> Son başarılı veri gösteriliyor.</p>`
+    ? `<p role="alert" class="hata"><strong>⚠ Canlı veriye ulaşılamadı.</strong> Son başarılı veri gösteriliyor.</p>`
     : "";
   alan.innerHTML =
     uyari +
-    `<form class="kontrol" onsubmit="return false" aria-label="Güvenli aralık ve filtre">
+    `<form id="kontrol-form" class="kontrol" aria-label="Güvenli aralık ve filtre">
       <label>Güvenli en yüksek dalga (m)
         <input id="max-dalga" type="number" min="0" step="0.1" value="1.0"></label>
       <label>Güvenli en yüksek rüzgâr (kn)
@@ -404,6 +380,7 @@ function ciz(veri, eski) {
        <a href="https://open-meteo.com/en/docs">Forecast API</a></p>
     <p><small>Bilgilendirme amaçlıdır; yelken/sörf kararı için resmî kaynaklara da bakın.</small></p>`;
 
+  document.getElementById("kontrol-form").addEventListener("submit", (e) => e.preventDefault());
   document.getElementById("max-dalga").addEventListener("input", guncelle);
   document.getElementById("max-ruzgar").addEventListener("input", guncelle);
   document.getElementById("filtre-durum").addEventListener("change", guncelle);
@@ -477,7 +454,7 @@ async function baslat() {
     if (eskiVeri) {
       ciz(eskiVeri, true);
     } else {
-      alan.innerHTML = `<p role="alert" style="color:#b00020">⚠ Veri yüklenemedi ve kayıtlı eski veri yok. Lütfen daha sonra tekrar deneyin.</p>`;
+      alan.innerHTML = `<p role="alert" class="hata">⚠ Veri yüklenemedi ve kayıtlı eski veri yok. Lütfen daha sonra tekrar deneyin.</p>`;
     }
   }
 }
